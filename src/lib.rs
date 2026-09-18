@@ -30,11 +30,15 @@
 //! username in play was Xmip's own and says nothing about the source.
 //!
 //! Evidence this technology writes: `username.source`, the property the name
-//! was read from.
+//! was read from; and `principal.user`, the name in the capability's canonical
+//! form, where the presented name is a user principal name — `user@domain` or
+//! `DOMAIN\user` (ADR-0054). A bare `jane` is not one, and nothing is added.
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use identify::{IdentifyError, Presented, StreamArrival, TransportIdentifier};
+use identify::{
+    IdentifyError, Presented, StreamArrival, TransportIdentifier, UserPrincipalName, principal,
+};
 use xcore::{Arriving, Mechanism};
 
 /// The shared property a carrier promotes a username under.
@@ -106,8 +110,10 @@ impl Username {
             )));
         }
 
-        let claim = Presented::passed(xcore::mechanism::username(), name)
-            .with_evidence(SOURCE, &self.username);
+        let claim = named(
+            Presented::passed(xcore::mechanism::username(), name)
+                .with_evidence(SOURCE, &self.username),
+        );
         Ok(Some(match password {
             Some(password) => claim.with_proof(PASSWORD_PROOF, password),
             None => claim,
@@ -151,10 +157,21 @@ fn basic(authorization: &str) -> Result<Option<Presented>, IdentifyError> {
     }
 
     Ok(Some(
-        Presented::passed(xcore::mechanism::username(), user)
-            .with_evidence(SOURCE, AUTHORIZATION)
-            .with_proof(BASIC_CREDENTIAL, credential),
+        named(
+            Presented::passed(xcore::mechanism::username(), user)
+                .with_evidence(SOURCE, AUTHORIZATION),
+        )
+        .with_proof(BASIC_CREDENTIAL, credential),
     ))
+}
+
+/// The claim, with its value beside it as `principal.user` in canonical form
+/// where that value is a user principal name (ADR-0054); otherwise as it was.
+fn named(claim: Presented) -> Presented {
+    match UserPrincipalName::parse(&claim.value) {
+        Some(name) => claim.with_evidence(principal::USER, name.to_string()),
+        None => claim,
+    }
 }
 
 impl TransportIdentifier for Username {
@@ -290,6 +307,60 @@ mod tests {
 
         assert!(failure.message.contains("cannot be both"), "{failure}");
         assert!(Username::from_properties("login", " ").is_err());
+    }
+
+    #[test]
+    fn a_user_principal_name_is_written_beside_the_value_in_canonical_form() {
+        let stream = stream();
+        let modern = facts(&[(USERNAME, "Jane@Partner-X.Example")]);
+        let arrival = StreamArrival::new(&stream, Arriving::Pushed, "ftp://xmip/in", &modern);
+        let claim = Username::default()
+            .identify(&arrival)
+            .expect("read")
+            .expect("a claim");
+
+        assert_eq!(claim.value, "Jane@Partner-X.Example", "the value stands");
+        assert!(claim.evidence.contains(&(
+            principal::USER.to_string(),
+            "Jane@partner-x.example".to_string()
+        )));
+
+        // `PARTNERX\jane:s3cr3t`, the down-level form in a Basic credential.
+        let older = facts(&[(AUTHORIZATION, "Basic UEFSVE5FUlhcamFuZTpzM2NyM3Q=")]);
+        let arrival = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &older);
+        let claim = Username::default()
+            .identify(&arrival)
+            .expect("read")
+            .expect("a claim");
+
+        assert_eq!(claim.value, "PARTNERX\\jane");
+        assert!(
+            claim
+                .evidence
+                .contains(&(principal::USER.to_string(), "jane@partnerx".to_string()))
+        );
+    }
+
+    #[test]
+    fn a_name_that_is_not_a_principal_name_gains_no_principal_evidence() {
+        let stream = stream();
+
+        for name in ["jane", "jane@", "jane@bad domain"] {
+            let facts = facts(&[(USERNAME, name)]);
+            let arrival = StreamArrival::new(&stream, Arriving::Pushed, "ftp://xmip/in", &facts);
+            let claim = Username::default()
+                .identify(&arrival)
+                .expect("read")
+                .expect("a claim");
+
+            assert!(
+                claim
+                    .evidence
+                    .iter()
+                    .all(|(evidence, _)| evidence != principal::USER),
+                "{name}"
+            );
+        }
     }
 
     #[test]
