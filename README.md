@@ -1,12 +1,6 @@
 # xmip-core-identify-username
 
-Identify by username: reads a username presented without a proof; a transport-layer identifier whose claim is passed. A technology of
-[xmip-core-identify](https://github.com/IlleNilsson/xmip-core-identify).
-
-Declared and not yet written; `architecture.toml` carries the maturity. When
-it is written it implements `TransportIdentifier`, one mechanism at one gate (ADR-0050).
-What it may depend on is `repository-model.md` section 4 and ADR-0044: its
-capability, and no sibling.
+Identify by username: a username presented in the clear, with the password it came with as proof; a transport-layer claim, passed. A technology of [xmip-core-identify](https://github.com/IlleNilsson/xmip-core-identify).
 
 ## Toolchain
 
