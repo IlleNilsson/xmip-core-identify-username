@@ -19,8 +19,6 @@ path = "src/lib.rs"
 # there. The mechanism it reads is declared once in xmip-core (ADR-0050).
 identify = { package = "xmip-core-identify", git = "https://github.com/IlleNilsson/xmip-core-identify", branch = "main" }
 xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
-# RFC 4648 base64, for the Basic credential an Authorization header carries.
-base64 = "0.22"
 
 [dev-dependencies]
 # The Stream an arrival carries, for the tests that build one.
