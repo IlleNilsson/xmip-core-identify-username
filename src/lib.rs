@@ -34,8 +34,7 @@
 //! form, where the presented name is a user principal name — `user@domain` or
 //! `DOMAIN\user` (ADR-0054). A bare `jane` is not one, and nothing is added.
 
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
+use identify::authorization::{self, AUTHORIZATION, BASIC_CREDENTIAL};
 use identify::{
     IdentifyError, Presented, StreamArrival, TransportIdentifier, UserPrincipalName, principal,
 };
@@ -46,13 +45,8 @@ pub const USERNAME: &str = "username";
 /// The shared property a carrier promotes the password under, where it was
 /// handed one.
 pub const PASSWORD: &str = "password";
-/// The property carrying the HTTP `Authorization` header.
-pub const AUTHORIZATION: &str = "http.header.authorization";
 /// The proof name a password rides under, read by `authenticate/password`.
 pub const PASSWORD_PROOF: &str = "password";
-/// The proof name a Basic credential rides under, read by
-/// `authenticate/basic`: the base64 text after `Basic `.
-pub const BASIC_CREDENTIAL: &str = "basic.credential";
 /// The evidence name the property the name was read from rides under.
 pub const SOURCE: &str = "username.source";
 
@@ -134,31 +128,14 @@ impl Default for Username {
 /// The user half of an `Authorization: Basic` value, with the credential as
 /// proof; `None` for any other scheme.
 fn basic(authorization: &str) -> Result<Option<Presented>, IdentifyError> {
-    let authorization = authorization.trim();
-    let (scheme, credential) = authorization
-        .split_once(|character: char| character.is_ascii_whitespace())
-        .map_or((authorization, ""), |(scheme, rest)| (scheme, rest.trim()));
-    if !scheme.eq_ignore_ascii_case("basic") {
+    let Some(credential) = authorization::under(authorization, "basic") else {
         return Ok(None);
-    }
-
-    let decoded = STANDARD
-        .decode(credential)
-        .map_err(|_| IdentifyError::new("the Basic credential is not base64"))?;
-    let text = String::from_utf8(decoded)
-        .map_err(|_| IdentifyError::new("the Basic credential is not UTF-8"))?;
-    let Some((user, _)) = text.split_once(':') else {
-        return Err(IdentifyError::new(
-            "the Basic credential has no colon between user and password",
-        ));
     };
-    if user.is_empty() {
-        return Err(IdentifyError::new("the Basic credential names no user"));
-    }
+    let (user, _) = authorization::basic(credential)?;
 
     Ok(Some(
         named(
-            Presented::passed(xcore::mechanism::username(), user)
+            Presented::passed(xcore::mechanism::username(), user.as_str())
                 .with_evidence(SOURCE, AUTHORIZATION),
         )
         .with_proof(BASIC_CREDENTIAL, credential),
