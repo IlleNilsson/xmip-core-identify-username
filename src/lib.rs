@@ -34,7 +34,8 @@
 //! form, where the presented name is a user principal name — `user@domain` or
 //! `DOMAIN\user` (ADR-0054). A bare `jane` is not one, and nothing is added.
 
-use identify::authorization::{self, AUTHORIZATION};
+use context::property::HTTP_AUTHORIZATION;
+use identify::authorization;
 use identify::evidence;
 use identify::{IdentifyError, Presented, StreamArrival, TransportIdentifier, UserPrincipalName};
 use xcore::{Arriving, Mechanism};
@@ -133,7 +134,7 @@ fn basic(authorization: &str) -> Result<Option<Presented>, IdentifyError> {
     Ok(Some(
         named(
             Presented::passed(xcore::mechanism::username(), user.as_str())
-                .with_evidence(SOURCE, AUTHORIZATION),
+                .with_evidence(SOURCE, HTTP_AUTHORIZATION),
         )
         .with_proof(evidence::BASIC_CREDENTIAL, credential),
     ))
@@ -162,7 +163,7 @@ impl TransportIdentifier for Username {
             return Ok(Some(claim));
         }
 
-        arrival.property(AUTHORIZATION).map_or(Ok(None), basic)
+        arrival.property(HTTP_AUTHORIZATION).map_or(Ok(None), basic)
     }
 }
 
@@ -226,7 +227,7 @@ mod tests {
     #[test]
     fn a_basic_authorization_presents_its_user_and_carries_the_credential_whole() {
         let stream = stream();
-        let facts = facts(&[(AUTHORIZATION, "basic cGFydG5lci14OnMzY3IzdA==")]);
+        let facts = facts(&[(HTTP_AUTHORIZATION, "basic cGFydG5lci14OnMzY3IzdA==")]);
         let arrival = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &facts);
 
         let claim = Username::default()
@@ -245,7 +246,7 @@ mod tests {
     #[test]
     fn an_arrival_nobody_logged_in_on_presents_nothing() {
         let stream = stream();
-        let facts = facts(&[(AUTHORIZATION, "Bearer mF_9.B5f-4.1JqM")]);
+        let facts = facts(&[(HTTP_AUTHORIZATION, "Bearer mF_9.B5f-4.1JqM")]);
         let bearer = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &facts);
         let bare = StreamArrival::new(&stream, Arriving::Pushed, "file:///in/x", &[]);
 
@@ -269,7 +270,7 @@ mod tests {
             "the carrier promoted password without username"
         );
 
-        let garbled = facts(&[(AUTHORIZATION, "Basic not*base64")]);
+        let garbled = facts(&[(HTTP_AUTHORIZATION, "Basic not*base64")]);
         let arrival = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &garbled);
         let failure = Username::default().identify(&arrival).expect_err("garbled");
         assert_eq!(failure.to_string(), "the Basic credential is not base64");
@@ -300,7 +301,7 @@ mod tests {
         )));
 
         // `PARTNERX\jane:s3cr3t`, the down-level form in a Basic credential.
-        let older = facts(&[(AUTHORIZATION, "Basic UEFSVE5FUlhcamFuZTpzM2NyM3Q=")]);
+        let older = facts(&[(HTTP_AUTHORIZATION, "Basic UEFSVE5FUlhcamFuZTpzM2NyM3Q=")]);
         let arrival = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &older);
         let claim = Username::default()
             .identify(&arrival)
