@@ -34,10 +34,9 @@
 //! form, where the presented name is a user principal name — `user@domain` or
 //! `DOMAIN\user` (ADR-0054). A bare `jane` is not one, and nothing is added.
 
-use identify::authorization::{self, AUTHORIZATION, BASIC_CREDENTIAL};
-use identify::{
-    IdentifyError, Presented, StreamArrival, TransportIdentifier, UserPrincipalName, principal,
-};
+use identify::authorization::{self, AUTHORIZATION};
+use identify::evidence;
+use identify::{IdentifyError, Presented, StreamArrival, TransportIdentifier, UserPrincipalName};
 use xcore::{Arriving, Mechanism};
 
 /// The shared property a carrier promotes a username under.
@@ -45,8 +44,6 @@ pub const USERNAME: &str = "username";
 /// The shared property a carrier promotes the password under, where it was
 /// handed one.
 pub const PASSWORD: &str = "password";
-/// The proof name a password rides under, read by `authenticate/password`.
-pub const PASSWORD_PROOF: &str = "password";
 /// The evidence name the property the name was read from rides under.
 pub const SOURCE: &str = "username.source";
 
@@ -109,7 +106,7 @@ impl Username {
                 .with_evidence(SOURCE, &self.username),
         );
         Ok(Some(match password {
-            Some(password) => claim.with_proof(PASSWORD_PROOF, password),
+            Some(password) => claim.with_proof(evidence::PASSWORD, password),
             None => claim,
         }))
     }
@@ -138,7 +135,7 @@ fn basic(authorization: &str) -> Result<Option<Presented>, IdentifyError> {
             Presented::passed(xcore::mechanism::username(), user.as_str())
                 .with_evidence(SOURCE, AUTHORIZATION),
         )
-        .with_proof(BASIC_CREDENTIAL, credential),
+        .with_proof(evidence::BASIC_CREDENTIAL, credential),
     ))
 }
 
@@ -146,7 +143,7 @@ fn basic(authorization: &str) -> Result<Option<Presented>, IdentifyError> {
 /// where that value is a user principal name (ADR-0054); otherwise as it was.
 fn named(claim: Presented) -> Presented {
     match UserPrincipalName::parse(&claim.value) {
-        Some(name) => claim.with_evidence(principal::USER, name.to_string()),
+        Some(name) => claim.with_evidence(evidence::PRINCIPAL_USER, name.to_string()),
         None => claim,
     }
 }
@@ -201,7 +198,7 @@ mod tests {
         assert_eq!(claim.value, "partner-x");
         assert_eq!(claim.established, Established::Passed);
         assert_eq!(claim.layer(), Layer::Transport);
-        assert_eq!(claim.proof(PASSWORD_PROOF), None);
+        assert_eq!(claim.proof(evidence::PASSWORD), None);
         assert_eq!(
             claim.evidence,
             vec![(SOURCE.to_string(), USERNAME.to_string())]
@@ -221,7 +218,7 @@ mod tests {
             .expect("a claim");
 
         assert_eq!(claim.value, "partner-x");
-        assert_eq!(claim.proof(PASSWORD_PROOF), Some("s3cr3t"));
+        assert_eq!(claim.proof(evidence::PASSWORD), Some("s3cr3t"));
         assert!(claim.evidence.iter().all(|(_, value)| value != "s3cr3t"));
         assert!(!format!("{claim:?}").contains("s3cr3t"));
     }
@@ -239,10 +236,10 @@ mod tests {
 
         assert_eq!(claim.value, "partner-x");
         assert_eq!(
-            claim.proof(BASIC_CREDENTIAL),
+            claim.proof(evidence::BASIC_CREDENTIAL),
             Some("cGFydG5lci14OnMzY3IzdA==")
         );
-        assert_eq!(claim.proof(PASSWORD_PROOF), None);
+        assert_eq!(claim.proof(evidence::PASSWORD), None);
     }
 
     #[test]
@@ -298,7 +295,7 @@ mod tests {
 
         assert_eq!(claim.value, "Jane@Partner-X.Example", "the value stands");
         assert!(claim.evidence.contains(&(
-            principal::USER.to_string(),
+            evidence::PRINCIPAL_USER.to_string(),
             "Jane@partner-x.example".to_string()
         )));
 
@@ -311,11 +308,10 @@ mod tests {
             .expect("a claim");
 
         assert_eq!(claim.value, "PARTNERX\\jane");
-        assert!(
-            claim
-                .evidence
-                .contains(&(principal::USER.to_string(), "jane@partnerx".to_string()))
-        );
+        assert!(claim.evidence.contains(&(
+            evidence::PRINCIPAL_USER.to_string(),
+            "jane@partnerx".to_string()
+        )));
     }
 
     #[test]
@@ -334,7 +330,7 @@ mod tests {
                 claim
                     .evidence
                     .iter()
-                    .all(|(evidence, _)| evidence != principal::USER),
+                    .all(|(evidence, _)| evidence != evidence::PRINCIPAL_USER),
                 "{name}"
             );
         }
