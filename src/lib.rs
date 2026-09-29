@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn a_username_without_a_password_is_a_claim_with_nothing_behind_it() {
         let stream = stream();
-        let facts = facts(&[(USERNAME, "partner-x")]);
+        let facts = facts(&[(USERNAME, "party-x")]);
         let arrival = StreamArrival::new(&stream, Arriving::Pushed, "ftp://xmip/in", &facts);
 
         let claim = Username::default()
@@ -196,7 +196,7 @@ mod tests {
             .expect("a claim");
 
         assert_eq!(claim.mechanism.name(), "username");
-        assert_eq!(claim.value, "partner-x");
+        assert_eq!(claim.value, "party-x");
         assert_eq!(claim.established, Established::Passed);
         assert_eq!(claim.layer(), Layer::Transport);
         assert_eq!(claim.proof(evidence::PASSWORD), None);
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn the_password_rides_as_proof_and_reaches_neither_the_record_nor_a_log_line() {
         let stream = stream();
-        let facts = facts(&[("ftp.user", "partner-x"), ("ftp.pass", "s3cr3t")]);
+        let facts = facts(&[("ftp.user", "party-x"), ("ftp.pass", "s3cr3t")]);
         let arrival = StreamArrival::new(&stream, Arriving::Pushed, "ftp://xmip/in", &facts);
 
         let claim = Username::from_properties("ftp.user", "ftp.pass")
@@ -218,7 +218,7 @@ mod tests {
             .expect("read")
             .expect("a claim");
 
-        assert_eq!(claim.value, "partner-x");
+        assert_eq!(claim.value, "party-x");
         assert_eq!(claim.proof(evidence::PASSWORD), Some("s3cr3t"));
         assert!(claim.evidence.iter().all(|(_, value)| value != "s3cr3t"));
         assert!(!format!("{claim:?}").contains("s3cr3t"));
@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn a_basic_authorization_presents_its_user_and_carries_the_credential_whole() {
         let stream = stream();
-        let facts = facts(&[(HTTP_AUTHORIZATION, "basic cGFydG5lci14OnMzY3IzdA==")]);
+        let facts = facts(&[(HTTP_AUTHORIZATION, "basic cGFydHkteDpzM2NyM3Q=")]);
         let arrival = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &facts);
 
         let claim = Username::default()
@@ -235,10 +235,10 @@ mod tests {
             .expect("read")
             .expect("a claim");
 
-        assert_eq!(claim.value, "partner-x");
+        assert_eq!(claim.value, "party-x");
         assert_eq!(
             claim.proof(evidence::BASIC_CREDENTIAL),
-            Some("cGFydG5lci14OnMzY3IzdA==")
+            Some("cGFydHkteDpzM2NyM3Q=")
         );
         assert_eq!(claim.proof(evidence::PASSWORD), None);
     }
@@ -287,31 +287,31 @@ mod tests {
     #[test]
     fn a_user_principal_name_is_written_beside_the_value_in_canonical_form() {
         let stream = stream();
-        let modern = facts(&[(USERNAME, "Jane@Partner-X.Example")]);
+        let modern = facts(&[(USERNAME, "Jane@Party-X.Example")]);
         let arrival = StreamArrival::new(&stream, Arriving::Pushed, "ftp://xmip/in", &modern);
         let claim = Username::default()
             .identify(&arrival)
             .expect("read")
             .expect("a claim");
 
-        assert_eq!(claim.value, "Jane@Partner-X.Example", "the value stands");
+        assert_eq!(claim.value, "Jane@Party-X.Example", "the value stands");
         assert!(claim.evidence.contains(&(
             evidence::PRINCIPAL_USER.to_string(),
-            "Jane@partner-x.example".to_string()
+            "Jane@party-x.example".to_string()
         )));
 
-        // `PARTNERX\jane:s3cr3t`, the down-level form in a Basic credential.
-        let older = facts(&[(HTTP_AUTHORIZATION, "Basic UEFSVE5FUlhcamFuZTpzM2NyM3Q=")]);
+        // `PARTYX\jane:s3cr3t`, the down-level form in a Basic credential.
+        let older = facts(&[(HTTP_AUTHORIZATION, "Basic UEFSVFlYXGphbmU6czNjcjN0")]);
         let arrival = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &older);
         let claim = Username::default()
             .identify(&arrival)
             .expect("read")
             .expect("a claim");
 
-        assert_eq!(claim.value, "PARTNERX\\jane");
+        assert_eq!(claim.value, "PARTYX\\jane");
         assert!(claim.evidence.contains(&(
             evidence::PRINCIPAL_USER.to_string(),
-            "jane@partnerx".to_string()
+            "jane@partyx".to_string()
         )));
     }
 
@@ -341,7 +341,7 @@ mod tests {
     fn a_scheduled_pickup_logged_in_as_xmip_and_says_nothing_about_the_source() {
         let stream = stream();
         let facts = facts(&[(USERNAME, "xmip-fetch"), (PASSWORD, "own")]);
-        let arrival = StreamArrival::new(&stream, Arriving::Scheduled, "ftp://partner/out", &facts);
+        let arrival = StreamArrival::new(&stream, Arriving::Scheduled, "ftp://party/out", &facts);
 
         assert!(
             Username::default()
