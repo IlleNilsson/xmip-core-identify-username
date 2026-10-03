@@ -170,12 +170,8 @@ impl TransportIdentifier for Username {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stream::Stream;
-    use xcore::{Established, Layer, StreamId};
 
-    fn stream() -> Stream {
-        Stream::new(StreamId::new(1), b"<order/>".to_vec(), None)
-    }
+    use xcore::{Established, Layer};
 
     fn facts(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
         pairs
@@ -186,9 +182,8 @@ mod tests {
 
     #[test]
     fn a_username_without_a_password_is_a_claim_with_nothing_behind_it() {
-        let stream = stream();
         let facts = facts(&[(USERNAME, "party-x")]);
-        let arrival = StreamArrival::new(&stream, Arriving::Pushed, "ftp://xmip/in", &facts);
+        let arrival = StreamArrival::new(Arriving::Pushed, "ftp://xmip/in", &facts);
 
         let claim = Username::default()
             .identify(&arrival)
@@ -208,9 +203,8 @@ mod tests {
 
     #[test]
     fn the_password_rides_as_proof_and_reaches_neither_the_record_nor_a_log_line() {
-        let stream = stream();
         let facts = facts(&[("ftp.user", "party-x"), ("ftp.pass", "s3cr3t")]);
-        let arrival = StreamArrival::new(&stream, Arriving::Pushed, "ftp://xmip/in", &facts);
+        let arrival = StreamArrival::new(Arriving::Pushed, "ftp://xmip/in", &facts);
 
         let claim = Username::from_properties("ftp.user", "ftp.pass")
             .expect("two names")
@@ -226,9 +220,8 @@ mod tests {
 
     #[test]
     fn a_basic_authorization_presents_its_user_and_carries_the_credential_whole() {
-        let stream = stream();
         let facts = facts(&[(HTTP_AUTHORIZATION, "basic cGFydHkteDpzM2NyM3Q=")]);
-        let arrival = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &facts);
+        let arrival = StreamArrival::new(Arriving::Pushed, "https://xmip/in", &facts);
 
         let claim = Username::default()
             .identify(&arrival)
@@ -245,10 +238,9 @@ mod tests {
 
     #[test]
     fn an_arrival_nobody_logged_in_on_presents_nothing() {
-        let stream = stream();
         let facts = facts(&[(HTTP_AUTHORIZATION, "Bearer mF_9.B5f-4.1JqM")]);
-        let bearer = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &facts);
-        let bare = StreamArrival::new(&stream, Arriving::Pushed, "file:///in/x", &[]);
+        let bearer = StreamArrival::new(Arriving::Pushed, "https://xmip/in", &facts);
+        let bare = StreamArrival::new(Arriving::Pushed, "file:///in/x", &[]);
 
         assert!(
             Username::default()
@@ -261,9 +253,8 @@ mod tests {
 
     #[test]
     fn a_password_without_a_username_and_a_credential_that_does_not_decode_are_errors() {
-        let stream = stream();
         let orphan = facts(&[(PASSWORD, "s3cr3t")]);
-        let arrival = StreamArrival::new(&stream, Arriving::Pushed, "ftp://xmip/in", &orphan);
+        let arrival = StreamArrival::new(Arriving::Pushed, "ftp://xmip/in", &orphan);
         let failure = Username::default().identify(&arrival).expect_err("orphan");
         assert_eq!(
             failure.to_string(),
@@ -271,7 +262,7 @@ mod tests {
         );
 
         let garbled = facts(&[(HTTP_AUTHORIZATION, "Basic not*base64")]);
-        let arrival = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &garbled);
+        let arrival = StreamArrival::new(Arriving::Pushed, "https://xmip/in", &garbled);
         let failure = Username::default().identify(&arrival).expect_err("garbled");
         assert_eq!(failure.to_string(), "the Basic credential is not base64");
     }
@@ -286,9 +277,8 @@ mod tests {
 
     #[test]
     fn a_user_principal_name_is_written_beside_the_value_in_canonical_form() {
-        let stream = stream();
         let modern = facts(&[(USERNAME, "Jane@Party-X.Example")]);
-        let arrival = StreamArrival::new(&stream, Arriving::Pushed, "ftp://xmip/in", &modern);
+        let arrival = StreamArrival::new(Arriving::Pushed, "ftp://xmip/in", &modern);
         let claim = Username::default()
             .identify(&arrival)
             .expect("read")
@@ -302,7 +292,7 @@ mod tests {
 
         // `PARTYX\jane:s3cr3t`, the down-level form in a Basic credential.
         let older = facts(&[(HTTP_AUTHORIZATION, "Basic UEFSVFlYXGphbmU6czNjcjN0")]);
-        let arrival = StreamArrival::new(&stream, Arriving::Pushed, "https://xmip/in", &older);
+        let arrival = StreamArrival::new(Arriving::Pushed, "https://xmip/in", &older);
         let claim = Username::default()
             .identify(&arrival)
             .expect("read")
@@ -317,11 +307,9 @@ mod tests {
 
     #[test]
     fn a_name_that_is_not_a_principal_name_gains_no_principal_evidence() {
-        let stream = stream();
-
         for name in ["jane", "jane@", "jane@bad domain"] {
             let facts = facts(&[(USERNAME, name)]);
-            let arrival = StreamArrival::new(&stream, Arriving::Pushed, "ftp://xmip/in", &facts);
+            let arrival = StreamArrival::new(Arriving::Pushed, "ftp://xmip/in", &facts);
             let claim = Username::default()
                 .identify(&arrival)
                 .expect("read")
@@ -339,9 +327,8 @@ mod tests {
 
     #[test]
     fn a_scheduled_pickup_logged_in_as_xmip_and_says_nothing_about_the_source() {
-        let stream = stream();
         let facts = facts(&[(USERNAME, "xmip-fetch"), (PASSWORD, "own")]);
-        let arrival = StreamArrival::new(&stream, Arriving::Scheduled, "ftp://party/out", &facts);
+        let arrival = StreamArrival::new(Arriving::Scheduled, "ftp://party/out", &facts);
 
         assert!(
             Username::default()
